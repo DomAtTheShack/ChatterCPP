@@ -27,17 +27,18 @@ public:
     std::string getUsr() const;
 
     void setUsr(std::string inUSR);
-    void createUserID();
+
+    void generateUSERID();
 
 
 private:
     std::string id;
     std::string usr;
 
+    std::string getComputerHostname();
+    std::string getInternalIPAddress();
 
-    void check_host_entry(hostent *hostentry);
-
-    void check_host_name(int hostname);
+    std::string md5(const std::string &str);
 };
 
 

@@ -21,7 +21,7 @@ int main()
     connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress));
 
     auto* pkt = new Packet("69", "NICE");
-    pkt->createUserID();
+    pkt->generateUSERID();
     int bufferSize = pkt->getSerializedSize();
     char* buffer = new char[bufferSize];
     pkt->serialize(buffer, bufferSize);

@@ -3,6 +3,8 @@ project(ChatterCPP)
 
 set(CMAKE_CXX_STANDARD 20)
 
+find_package(OpenSSL REQUIRED)
+
 add_executable(ChatterCPP_Server Server/main.cpp
         Packet.cpp
         Packet.h)
@@ -10,4 +12,7 @@ add_executable(ChatterCPP_Server Server/main.cpp
 add_executable(ChatterCPP_Client Client/main.cpp
         Packet.cpp
         Packet.h)
+
+target_link_libraries(ChatterCPP_Client OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(ChatterCPP_Server OpenSSL::SSL OpenSSL::Crypto)
 
