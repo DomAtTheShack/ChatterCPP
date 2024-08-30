@@ -1,34 +1,1 @@
-//
-// Created by dominichann on 8/28/24.
-//
-
-#include <cstring>
-#include <iostream>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include "../Packet.h"
-
-int main()
-{
-    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-
-    sockaddr_in serverAddress;
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(8081);
-    serverAddress.sin_addr.s_addr = INADDR_ANY;
-
-    connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress));
-
-    auto* pkt = new Packet("69", "NICE");
-    pkt->generateUSERID();
-    int bufferSize = pkt->getSerializedSize();
-    char* buffer = new char[bufferSize];
-    pkt->serialize(buffer, bufferSize);
-    send(clientSocket, &bufferSize, sizeof(int), 0);
-    send(clientSocket, buffer, bufferSize, 0);
-    delete pkt;
-
-    close(clientSocket);
-}
-
+//// Created by dominichann on 8/28/24.//#include <cstring>#include <iostream>#include <netinet/in.h>#include <sys/socket.h>#include <unistd.h>#include "../Packet.h"#define PORT 8083sockaddr_in initClientSocket(int &clientSocket);int main(){    int clientSocket;    sockaddr_in serverAddress = initClientSocket(clientSocket);    if(connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) != 0)    {        std::cerr << "Bad network connection to server!" << std::endl;        return -1;    }    std::string usrNm;    std::string message;    std::cout << "Connected!\nEnter your Username: ";    getline(std::cin, usrNm);    std::cout << "\n";    std::cout << "Enter your message: ";    getline(std::cin, message);    std::cout << "\n";    auto* pkt = new Packet(usrNm, message);    if(Packet::sendPacket(*pkt, clientSocket) != 0)        std::cout << "Message sent" << '\n';    else        std::cout << "Message not sent" << '\n';    delete pkt;    close(clientSocket);}sockaddr_in initClientSocket(int &clientSocket){    clientSocket = socket(AF_INET, SOCK_STREAM, 0);    sockaddr_in serverAddress;    serverAddress.sin_family = AF_INET;    serverAddress.sin_port = htons(PORT);    serverAddress.sin_addr.s_addr = INADDR_ANY;    return serverAddress;}

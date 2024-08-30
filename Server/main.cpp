@@ -5,6 +5,9 @@
 #include <unistd.h>
 #include "../Packet.h"
 
+#define PORT 8083
+
+
 using namespace std;
 
 int initServerSocket(int &serverSocket);
@@ -17,38 +20,55 @@ int main() {
 
     initServerSocket(serverSocket);
     cout << "Listing for Connections " << endl ;
-    listen(serverSocket, 5);
 
+    while (true) {
+        listen(serverSocket, 5);
 
-    int clientSocket = accept(serverSocket, nullptr, nullptr);
-    int bufferSize;
-    recv(clientSocket, &bufferSize, 32, 0);
-    char* buffer = new char[bufferSize];
-    ssize_t bytesReceived = recv(clientSocket, buffer, 32, 0);
+        int clientSocket = accept(serverSocket, nullptr, nullptr);
+        if (clientSocket < 0) {
+            std::cerr << "Error: Failed to accept client connection!" << std::endl;
+            continue;
+        }
 
+        int bufferSize;
+        size_t receivedSize = recv(clientSocket, &bufferSize, sizeof(bufferSize), 0);
+        if (receivedSize != sizeof(bufferSize) || bufferSize <= 0) {
+            std::cerr << "Error: Received incorrect buffer size!" << std::endl;
+            close(clientSocket);
+            continue;
+        }
 
-    Packet* pkt = new Packet(0, "NULL");
-    pkt->deserialize(buffer);
+        char* buffer = new char[bufferSize];
 
-    cout << "Message from client: " << pkt->getUsr() << " " << pkt->getID() << endl;
+        Packet::receiveAll(clientSocket, buffer, bufferSize);
 
-    close(serverSocket);
+        auto* pkt = new Packet();
+        pkt->deserialize(buffer, bufferSize);
+
+        std::cout << "Message from " << pkt->getUsr() << ": "
+        << pkt->getMsg() << '\n';
+        std::cout << "Deserialization Debug: ID = " << pkt->getID() << '\n';
+
+        delete[] buffer;
+        delete pkt;
+        close(clientSocket);
+    }
     return 0;
 }
 
 int initServerSocket(int &serverSocket)
 {
-    int port = 8081;
+
     serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 
     sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(port);
+    serverAddress.sin_port = htons(PORT);
     serverAddress.sin_addr.s_addr = INADDR_ANY;
 
     if(bind(serverSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) != 0)
     {
-        cerr << " ERROR: Failed to Bind Server socket to port " << port << endl;
+        cerr << " ERROR: Failed to Bind Server socket to port " << PORT << endl;
     }
 
 

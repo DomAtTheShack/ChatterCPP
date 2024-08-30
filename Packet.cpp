@@ -14,72 +14,108 @@
 #include <openssl/md5.h>
 #include <sstream>
 #include <iomanip>
+#include <iostream>
 
 using namespace std;
 
-Packet::Packet(std::string id, std::string msg)
+Packet::Packet()
 {
-    this->id = std::move(id);
-    usr = std::move(msg);
+    usr = "SERVER_DEBUG";
+    id = "YOU SHOULDN'T SEE THIS";
+    message = "REALLY YOU SHOULD WATCH BLUEY";
+}
+
+Packet::Packet(std::string usr, string msg)
+{
+    this->id = generateUSERID();
+    this->usr = std::move(usr);
+    message = std::move(msg);
 }
 Packet::~Packet() = default;
 
 // Serialize the object into a byte buffer
-void Packet::serialize(char* buffer, size_t size) const {
+void Packet::serialize(char* buffer, size_t size) {
     // Ensure the buffer size is sufficient
     if (size < getSerializedSize()) return;
 
     // Copy integer
+    // memcpy(buffer + offset, &id, sizeof(id));
+    // offset += sizeof(id);
+
+    // Copy float
+    // memcpy(buffer + offset, &value, sizeof(value));
+    // offset += sizeof(value);
+
+    // Copy array of doubles
+    // memcpy(buffer + offset, numbers, sizeof(numbers));
+
     size_t offset = 0;
-    memcpy(buffer + offset, &id, sizeof(id));
-    offset += sizeof(id);
 
-//    // Copy float
-//    memcpy(buffer + offset, &value, sizeof(value));
-//    offset += sizeof(value);
+    serializeString(buffer, size, offset, id);
+    serializeString(buffer, size, offset, usr);
+    serializeString(buffer, size, offset, message);
+}
 
-    // Copy string length and content
-    size_t strLength = usr.size();
+void Packet::serializeString(char* buffer, size_t bufferSize, size_t& offset, const std::string& stringToSerial) {
+    // Determine the length of the string
+    size_t strLength = stringToSerial.size();
+
+    // Check if the buffer has enough space to hold the string length and the string data
+    if (offset + sizeof(strLength) + strLength > bufferSize) {
+        std::cerr << "Error: Buffer size is too small to serialize the string!" << std::endl;
+        return;
+    }
+
+    // Serialize the length of the string
     memcpy(buffer + offset, &strLength, sizeof(strLength));
     offset += sizeof(strLength);
-    memcpy(buffer + offset, usr.c_str(), strLength);
-    offset += strLength;
 
-//    // Copy array of doubles
-//    memcpy(buffer + offset, numbers, sizeof(numbers));
+    // Serialize the string data
+    memcpy(buffer + offset, stringToSerial.c_str(), strLength);
+    offset += strLength;
 }
 
 // Deserialize the object from a byte buffer
-void Packet::deserialize(const char* buffer) {
+void Packet::deserialize(const char* buffer, size_t bufferSize) {
     size_t offset = 0;
 
-    // Read integer
-//    memcpy(&id, buffer + offset, sizeof(id));
-//    offset += sizeof(id);
+    // Read the strings into the buffer
+    deserializeString(offset, buffer, bufferSize, &id);
 
-//    // Read float
-//    memcpy(&value, buffer + offset, sizeof(value));
-//    offset += sizeof(value);
+    deserializeString(offset, buffer, bufferSize, &usr);
 
-    // Read string length and content
+    deserializeString(offset, buffer, bufferSize, &message);
+
+
+}
+
+void Packet::deserializeString(size_t& offset, const char* buffer, size_t bufferSize, string* stringToDeser)
+{
+    // Ensure the buffer is large enough to read the string length
+    if (offset + sizeof(size_t) > bufferSize) {
+        std::cerr << "Error: Buffer size too small to read string length!" << std::endl;
+        return;
+    }
+
+    // Read the string length
     size_t strLength;
     memcpy(&strLength, buffer + offset, sizeof(strLength));
     offset += sizeof(strLength);
-    usr.assign(buffer + offset, strLength);
-    offset += strLength;
 
-    memcpy(&strLength, buffer + offset, sizeof(strLength));
-    offset += sizeof(strLength);
-    id.assign(buffer + offset, strLength);
-    offset += strLength;
+    // Check if the string length is reasonable and within the buffer limits
+    if (offset + strLength > bufferSize) {
+        std::cerr << "Error: Buffer size too small to read string data!" << std::endl;
+        return;
+    }
 
-//    // Read array of doubles
-//    memcpy(numbers, buffer + offset, sizeof(numbers));
+    // Assign the string data
+    stringToDeser->assign(buffer + offset, strLength);
+    offset += strLength;
 }
 
 // Calculate the total size required for serialization
 size_t Packet::getSerializedSize() const {
-    return sizeof(id) + sizeof(size_t) + usr.size() ;
+    return id.size() + (sizeof(size_t) * 3) + usr.size() + message.size() ;
 }
 
 std::string Packet::getID() const {
@@ -103,17 +139,17 @@ string Packet::getComputerHostname()
     return host;
 }
 
-string Packet::getInternalIPAddress()
-{
-    struct ifaddrs* ifaddr;
-    struct ifaddrs* ifa;
+std::string Packet::getInternalIPAddress() {
+    struct ifaddrs *ifaddr, *ifa;
     char ip[INET_ADDRSTRLEN];  // Buffer for the IP address (IPv4)
 
     // Get the list of network interfaces
     if (getifaddrs(&ifaddr) == -1) {
         perror("getifaddrs");
-        return NULL;
+        return "";
     }
+
+    std::string internalIP;
 
     // Iterate through the linked list of interfaces
     for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
@@ -127,17 +163,20 @@ string Packet::getInternalIPAddress()
 
             // Skip loopback address
             if (strcmp(ip, "127.0.0.1") != 0) {
-                 return ip;
+                internalIP = ip;  // Store the IP
+                break;  // Found the internal IP, exit the loop
             }
         }
     }
 
     // Free the linked list
     freeifaddrs(ifaddr);
-    return NULL;
+
+    return internalIP.empty() ? "" : internalIP;
 }
 
-std::string Packet::md5(const std::string &str){
+std::string Packet::md5(const std::string &str)
+{
     unsigned char hash[MD5_DIGEST_LENGTH];
 
     MD5_CTX md5;
@@ -147,20 +186,63 @@ std::string Packet::md5(const std::string &str){
 
     std::stringstream ss;
 
-    for(int i = 0; i < MD5_DIGEST_LENGTH; i++){
-        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>( hash[i] );
+    for(unsigned char i : hash){
+        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>( i );
     }
     return ss.str();
 }
 
 
-void Packet::generateUSERID()
+std::string Packet::generateUSERID()
 {
     string idBefore = getComputerHostname() + " " + getInternalIPAddress();
-    string idAfter = md5(idBefore);
+    return md5(idBefore);
 }
 
+bool Packet::receiveAll(int clientSocket, char* buffer, size_t totalBytes) {
+    size_t bytesRead = 0;  // Total bytes read so far
+    struct timeval timeout;
+    timeout.tv_sec = 5;  // 5 seconds timeout
+    timeout.tv_usec = 0;
+    setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
+
+    while (bytesRead < totalBytes) {
+        // Attempt to read the remaining number of bytes
+        ssize_t result = recv(clientSocket, buffer + bytesRead, totalBytes - bytesRead, 0);
+
+        if (result < 0) {
+            // Error occurred during recv
+            std::cerr << "Error: Failed to receive data!" << std::endl;
+            return false;
+        } else if (result == 0) {
+            // Connection closed gracefully by the client
+            std::cerr << "Connection closed by the client!" << std::endl;
+            return false;
+        }
+
+        // Update the total bytes read so far
+        bytesRead += result;
+    }
+
+    // If we reach this point, we have successfully read all expected data
+    return true;
+}
+
+int Packet::sendPacket(Packet pkt, int clientSocket)
+{
+    size_t bufferSize = pkt.getSerializedSize();
+    char* buffer = new char[bufferSize];
+
+    pkt.serialize(buffer, bufferSize);
+
+    if(send(clientSocket, &bufferSize, sizeof(int), 0) == -1) return -1;
+    return send(clientSocket, buffer, bufferSize, 0);
+}
+
+std::string Packet::getMsg() const {
+    return message;
+}
 
 
 

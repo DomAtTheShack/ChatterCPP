@@ -14,11 +14,13 @@ class Packet
 {
 public:
 
-    Packet(std::string id, std::string msg);
+    Packet();
+
+    Packet(std::string usr, std::string msg);
     ~Packet();
 
-    void serialize(char* buffer, size_t size) const;
-    void deserialize(const char* buffer);
+    void serialize(char* buffer, size_t size);
+    void deserialize(const char *buffer, size_t bufferSize);
 
     size_t getSerializedSize() const;
 
@@ -26,19 +28,29 @@ public:
 
     std::string getUsr() const;
 
+    std::string getMsg() const;
+
     void setUsr(std::string inUSR);
 
-    void generateUSERID();
+    static bool receiveAll(int clientSocket, char *buffer, size_t totalBytes);
+    static int sendPacket(Packet pkt, int clientSocket);
 
 
 private:
     std::string id;
     std::string usr;
+    std::string message;
 
-    std::string getComputerHostname();
-    std::string getInternalIPAddress();
+    static std::string generateUSERID();
+    static std::string getComputerHostname();
+    static std::string getInternalIPAddress();
 
-    std::string md5(const std::string &str);
+    static std::string md5(const std::string &str);
+
+    static void deserializeString(size_t &offset, const char *buffer, size_t bufferSize, std::string *stringToDeser);
+
+    static void serializeString(char *buffer, size_t bufferSize, size_t &offset, const std::string &stringToSerial);
+
 };
 
 
