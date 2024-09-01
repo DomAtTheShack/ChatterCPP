@@ -118,11 +118,11 @@ size_t Packet::getSerializedSize() const {
     return id.size() + (sizeof(size_t) * 3) + usr.size() + message.size() ;
 }
 
-std::string Packet::getID() const {
+const string& Packet::getID() const {
     return id;
 }
 
-std::string Packet::getUsr() const {
+const string& Packet::getUsr() const {
     return usr;
 }
 

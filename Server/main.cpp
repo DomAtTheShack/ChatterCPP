@@ -4,6 +4,10 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include "../Packet.h"
+#include "User.h"
+#include <vector>
+#include <thread>
+#include <mutex>
 
 #define PORT 8083
 
@@ -11,9 +15,10 @@
 using namespace std;
 
 int initServerSocket(int &serverSocket);
+void addUser(Packet* pkt, int* clientSocket);
 
-
-
+std::vector<User*> users = {};
+std::mutex usersMutex;
 
 int main() {
     int serverSocket;
@@ -45,6 +50,7 @@ int main() {
         auto* pkt = new Packet();
         pkt->deserialize(buffer, bufferSize);
 
+        addUser(pkt, &clientSocket);
         std::cout << "Message from " << pkt->getUsr() << ": "
         << pkt->getMsg() << '\n';
         std::cout << "Deserialization Debug: ID = " << pkt->getID() << '\n';
@@ -73,4 +79,9 @@ int initServerSocket(int &serverSocket)
 
 
     return 0;
+}
+
+void addUser(Packet* pkt, int* clientSocket)
+{
+    users.push_back(new User(clientSocket, pkt->getUsr()));
 }

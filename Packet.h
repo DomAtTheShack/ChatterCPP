@@ -24,9 +24,9 @@ public:
 
     size_t getSerializedSize() const;
 
-    std::string getID() const;
+    const std::string & getID() const;
 
-    std::string getUsr() const;
+    const std::string & getUsr() const;
 
     std::string getMsg() const;
 

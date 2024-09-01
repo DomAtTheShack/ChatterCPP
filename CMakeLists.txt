@@ -7,7 +7,9 @@ find_package(OpenSSL REQUIRED)
 
 add_executable(ChatterCPP_Server Server/main.cpp
         Packet.cpp
-        Packet.h)
+        Packet.h
+        Server/User.cpp
+        Server/User.h)
 
 add_executable(ChatterCPP_Client Client/main.cpp
         Packet.cpp
