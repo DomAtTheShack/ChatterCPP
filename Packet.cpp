@@ -25,6 +25,14 @@ Packet::Packet()
     message = "REALLY YOU SHOULD WATCH BLUEY";
 }
 
+Packet::Packet(std::string usr)
+{
+    this->usr = std::move(usr);
+    id = generateUSERID();
+    message = "$CONNECT_PKT";
+}
+
+
 Packet::Packet(std::string usr, string msg)
 {
     this->id = generateUSERID();
@@ -229,16 +237,17 @@ bool Packet::receiveAll(int clientSocket, char* buffer, size_t totalBytes) {
     return true;
 }
 
-int Packet::sendPacket(Packet pkt, int clientSocket)
+int Packet::sendPacket(Packet pkt, int* clientSocket)
 {
     size_t bufferSize = pkt.getSerializedSize();
     char* buffer = new char[bufferSize];
 
     pkt.serialize(buffer, bufferSize);
 
-    if(send(clientSocket, &bufferSize, sizeof(int), 0) == -1) return -1;
-    return send(clientSocket, buffer, bufferSize, 0);
+    if(send(*clientSocket, &bufferSize, sizeof(int), 0) == -1) return -1;
+    return send(*clientSocket, buffer, bufferSize, 0);
 }
+
 
 std::string Packet::getMsg() const {
     return message;

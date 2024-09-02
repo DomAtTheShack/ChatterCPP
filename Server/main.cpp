@@ -9,13 +9,15 @@
 #include <thread>
 #include <mutex>
 
-#define PORT 8083
+#define PORT 8080
 
 
 using namespace std;
 
 int initServerSocket(int &serverSocket);
 void addUser(Packet* pkt, int* clientSocket);
+int acceptConnection(int* clientSocket, const int* serverSocket);
+int receviePacketSize(int* bufferSize, const int* clientSocket);
 
 std::vector<User*> users = {};
 std::mutex usersMutex;
@@ -25,39 +27,35 @@ int main() {
 
     initServerSocket(serverSocket);
     cout << "Listing for Connections " << endl ;
+    listen(serverSocket, 5);
 
     while (true) {
-        listen(serverSocket, 5);
 
-        int clientSocket = accept(serverSocket, nullptr, nullptr);
-        if (clientSocket < 0) {
-            std::cerr << "Error: Failed to accept client connection!" << std::endl;
+        int clientSocket;
+        if(acceptConnection(&clientSocket, &serverSocket) == -1)
             continue;
-        }
 
         int bufferSize;
-        size_t receivedSize = recv(clientSocket, &bufferSize, sizeof(bufferSize), 0);
-        if (receivedSize != sizeof(bufferSize) || bufferSize <= 0) {
-            std::cerr << "Error: Received incorrect buffer size!" << std::endl;
-            close(clientSocket);
+        if(receviePacketSize(&bufferSize, &clientSocket) == -1)
             continue;
-        }
 
         char* buffer = new char[bufferSize];
 
-        Packet::receiveAll(clientSocket, buffer, bufferSize);
+        if (!Packet::receiveAll(clientSocket, buffer, bufferSize)) {
+            std::cerr << "Failed to receive complete packet data." << std::endl;
+            close(clientSocket);
+            delete[] buffer;
+            continue;
+        }
 
         auto* pkt = new Packet();
         pkt->deserialize(buffer, bufferSize);
 
         addUser(pkt, &clientSocket);
-        std::cout << "Message from " << pkt->getUsr() << ": "
-        << pkt->getMsg() << '\n';
-        std::cout << "Deserialization Debug: ID = " << pkt->getID() << '\n';
+
 
         delete[] buffer;
         delete pkt;
-        close(clientSocket);
     }
     return 0;
 }
@@ -84,4 +82,24 @@ int initServerSocket(int &serverSocket)
 void addUser(Packet* pkt, int* clientSocket)
 {
     users.push_back(new User(clientSocket, pkt->getUsr()));
+}
+
+int acceptConnection(int* clientSocket, const int* serverSocket) {
+    *clientSocket = accept(*serverSocket, nullptr, nullptr);
+    if (*clientSocket < 0) {
+        std::cerr << "Error: Failed to accept client connection!" << std::endl;
+        return -1;
+    }
+    return 0;
+}
+
+int receviePacketSize(int* bufferSize, const int* clientSocket)
+{
+    int receivedSize = recv(*clientSocket, bufferSize, sizeof(*bufferSize), 0);
+    if (receivedSize != sizeof(*bufferSize) || *bufferSize <= 0) {
+        std::cerr << "Error: Received incorrect buffer size!" << std::endl;
+        close(*clientSocket);
+        return -1;
+    }
+    return 0;
 }

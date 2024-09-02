@@ -3,8 +3,7 @@
 //
 
 #include "User.h"
-
-#include <utility>
+#include <unistd.h>
 
 User::User(int *clientSocket, std::string username)
 {
@@ -13,4 +12,8 @@ User::User(int *clientSocket, std::string username)
 }
 
 
-User::~User() = default;
+User::~User()
+{
+    close(*clientSocket);
+    delete this;
+}

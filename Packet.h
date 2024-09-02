@@ -17,6 +17,7 @@ public:
     Packet();
 
     Packet(std::string usr, std::string msg);
+    explicit Packet(std::string usr);
     ~Packet();
 
     void serialize(char* buffer, size_t size);
@@ -33,8 +34,7 @@ public:
     void setUsr(std::string inUSR);
 
     static bool receiveAll(int clientSocket, char *buffer, size_t totalBytes);
-    static int sendPacket(Packet pkt, int clientSocket);
-
+    static int sendPacket(Packet pkt, int* clientSocket);
 
 private:
     std::string id;
