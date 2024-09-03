@@ -21,7 +21,7 @@ using namespace std;
 Packet::Packet()
 {
     usr = "SERVER_DEBUG";
-    id = "YOU SHOULDN'T SEE THIS";
+    id = "YOU SHOULD WATCH THIS SHOW";
     message = "REALLY YOU SHOULD WATCH BLUEY";
 }
 
@@ -235,6 +235,55 @@ bool Packet::receiveAll(int clientSocket, char* buffer, size_t totalBytes) {
 
     // If we reach this point, we have successfully read all expected data
     return true;
+}
+
+bool Packet::checkAndReceivePacket(int* clientSocket) {
+    // Determine the size of the object in bytes
+    size_t totalBytes = 8192;
+    char* buffer = new char[totalBytes];  // Dynamically allocate buffer of the appropriate size
+
+    fd_set readfds;
+    struct timeval timeout;
+
+    // Set up the timeout for select
+    timeout.tv_sec = 5;  // 5 second timeout
+    timeout.tv_usec = 0;
+
+    // Clear the set and add our socket
+    FD_ZERO(&readfds);
+    FD_SET(*clientSocket, &readfds);
+
+    // Use select to wait for data to be available on the socket
+    int activity = select(*clientSocket + 1, &readfds, nullptr, nullptr, &timeout);
+
+    if (activity < 0) {
+        std::cerr << "Error: select() failed!" << std::endl;
+        delete[] buffer;  // Clean up
+        return false;
+    } else if (activity == 0) {
+        // Timeout occurred, no data available
+        delete[] buffer;  // Clean up
+        return false; // No new packet has been sent
+    }
+
+    // Data is available to be read
+    if (FD_ISSET(*clientSocket, &readfds)) {
+        // Call receiveAll to receive the complete packet
+        if (Packet::receiveAll(*clientSocket, buffer, totalBytes)) {
+            // Copy the data from the buffer to the object
+            deserialize(buffer, totalBytes);
+            std::cout << "Packet received successfully!" << '\n';
+            delete[] buffer;  // Clean up
+            return true;
+        } else {
+            std::cerr << "Failed to receive complete packet!" << '\n';
+            delete[] buffer;  // Clean up
+            return false;
+        }
+    }
+
+    delete[] buffer;  // Clean up
+    return false;
 }
 
 int Packet::sendPacket(Packet pkt, int* clientSocket)

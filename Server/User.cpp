@@ -4,11 +4,13 @@
 
 #include "User.h"
 #include <unistd.h>
+#include <utility>
 
-User::User(int *clientSocket, std::string username)
+User::User(int* clientSocket, std::string username, std::string ID)
 {
     this->clientSocket = clientSocket;
-    user = username;
+    user = std::move(username);
+    this->ID = std::move(ID);
 }
 
 
@@ -16,4 +18,8 @@ User::~User()
 {
     close(*clientSocket);
     delete this;
+}
+
+std::string User::getID() const {
+    return ID;
 }

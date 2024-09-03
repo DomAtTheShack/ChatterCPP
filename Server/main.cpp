@@ -1,105 +1,1 @@
-#include <cstring>
-#include <iostream>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include "../Packet.h"
-#include "User.h"
-#include <vector>
-#include <thread>
-#include <mutex>
-
-#define PORT 8080
-
-
-using namespace std;
-
-int initServerSocket(int &serverSocket);
-void addUser(Packet* pkt, int* clientSocket);
-int acceptConnection(int* clientSocket, const int* serverSocket);
-int receviePacketSize(int* bufferSize, const int* clientSocket);
-
-std::vector<User*> users = {};
-std::mutex usersMutex;
-
-int main() {
-    int serverSocket;
-
-    initServerSocket(serverSocket);
-    cout << "Listing for Connections " << endl ;
-    listen(serverSocket, 5);
-
-    while (true) {
-
-        int clientSocket;
-        if(acceptConnection(&clientSocket, &serverSocket) == -1)
-            continue;
-
-        int bufferSize;
-        if(receviePacketSize(&bufferSize, &clientSocket) == -1)
-            continue;
-
-        char* buffer = new char[bufferSize];
-
-        if (!Packet::receiveAll(clientSocket, buffer, bufferSize)) {
-            std::cerr << "Failed to receive complete packet data." << std::endl;
-            close(clientSocket);
-            delete[] buffer;
-            continue;
-        }
-
-        auto* pkt = new Packet();
-        pkt->deserialize(buffer, bufferSize);
-
-        addUser(pkt, &clientSocket);
-
-
-        delete[] buffer;
-        delete pkt;
-    }
-    return 0;
-}
-
-int initServerSocket(int &serverSocket)
-{
-
-    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-
-    sockaddr_in serverAddress;
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(PORT);
-    serverAddress.sin_addr.s_addr = INADDR_ANY;
-
-    if(bind(serverSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) != 0)
-    {
-        cerr << " ERROR: Failed to Bind Server socket to port " << PORT << endl;
-    }
-
-
-    return 0;
-}
-
-void addUser(Packet* pkt, int* clientSocket)
-{
-    users.push_back(new User(clientSocket, pkt->getUsr()));
-}
-
-int acceptConnection(int* clientSocket, const int* serverSocket) {
-    *clientSocket = accept(*serverSocket, nullptr, nullptr);
-    if (*clientSocket < 0) {
-        std::cerr << "Error: Failed to accept client connection!" << std::endl;
-        return -1;
-    }
-    return 0;
-}
-
-int receviePacketSize(int* bufferSize, const int* clientSocket)
-{
-    int receivedSize = recv(*clientSocket, bufferSize, sizeof(*bufferSize), 0);
-    if (receivedSize != sizeof(*bufferSize) || *bufferSize <= 0) {
-        std::cerr << "Error: Received incorrect buffer size!" << std::endl;
-        close(*clientSocket);
-        return -1;
-    }
-    return 0;
-}
+#include <cstring>#include <iostream>#include <netinet/in.h>#include <sys/socket.h>#include <unistd.h>#include "../Packet.h"#include "User.h"#include <vector>#include <thread>#include <mutex>#define PORT 8085using namespace std;int initServerSocket(int &serverSocket);void addUser(Packet* pkt, int* clientSocket);int acceptConnection(int* clientSocket, const int* serverSocket);int packetSize(int* bufferSize, const int* clientSocket);bool isUserConnected(const std::string& userID);void handleClient(int clientSocket);std::vector<User*> users = {};std::mutex mtx;  // Mutex for synchronizing access to socket operationsint main() {    int serverSocket;    if (initServerSocket(serverSocket) == -1) {        std::cerr << "Failed to initialize server socket." << std::endl;        return -1;    }    std::cout << "Listening for connections..." << std::endl;    listen(serverSocket, 5);    std::vector<std::thread> clientThreads;    while (true) {        int clientSocket;        // Accept a new connection        clientSocket = accept(serverSocket, nullptr, nullptr);        if (clientSocket == -1) {            std::cerr << "Failed to accept a new connection." << std::endl;            continue;        }        // Create a new thread to handle this client        clientThreads.emplace_back(handleClient, clientSocket);    }    // Wait for all client threads to finish (not reached in this example)    for (auto& thread : clientThreads) {        if (thread.joinable()) {            thread.join();        }    }    return 0;}void handleClient(int clientSocket) {    while (true) {        int bufferSize = 1024;         //Get the size of the incoming packet        if (packetSize(&bufferSize, &clientSocket) == -1) {            std::cerr << "Failed to get packet size or connection closed." << std::endl;            close(clientSocket); // Close the socket if an error occurs            return;  // End the thread for this client        }        char* buffer = new char[bufferSize]; // Dynamically allocate the buffer        // Receive the entire packet        if (!Packet::receiveAll(clientSocket, buffer, bufferSize)) {            std::cerr << "Failed to receive complete packet data or connection closed." << std::endl;            close(clientSocket);            delete[] buffer; // Free allocated memory            return;  // End the thread for this client        }        auto* pkt = new Packet();        pkt->deserialize(buffer, bufferSize); // Deserialize the received data        std::lock_guard<std::mutex> lock(mtx);  // Lock mutex for synchronized output        std::cout << "Checking if user is connected..." << std::endl;        if (!isUserConnected(pkt->getID())) {            std::cout << "User is not connected. Adding new user." << std::endl;            addUser(pkt, &clientSocket);            std::cout << "Hello newbie " << pkt->getMsg() << std::endl;        } else {            std::cout << "User is already connected." << std::endl;            std::cout << "Hello " << pkt->getUsr() << std::endl;        }        delete[] buffer; // Free the buffer memory        delete pkt; // Free the packet object    }}/** * * @param serverSocket * @return */int initServerSocket(int &serverSocket){    serverSocket = socket(AF_INET, SOCK_STREAM, 0);    sockaddr_in serverAddress{};    serverAddress.sin_family = AF_INET;    serverAddress.sin_port = htons(PORT);    serverAddress.sin_addr.s_addr = INADDR_ANY;    if(bind(serverSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) != 0)    {        cerr << " ERROR: Failed to Bind Server socket to port " << PORT << endl;        return -1;    }    return 0;}void addUser(Packet* pkt, int* clientSocket){    users.push_back(new User(clientSocket, pkt->getUsr(), pkt->getID()));}int acceptConnection(int* clientSocket, const int* serverSocket) {    *clientSocket = accept(*serverSocket, nullptr, nullptr);    if (*clientSocket < 0) {        std::cerr << "Error: Failed to accept client connection!" << std::endl;        return -1;    }    return 0;}int packetSize(int* bufferSize, const int* clientSocket){    int receivedSize = recv(*clientSocket, bufferSize, sizeof(*bufferSize), 0);    if (receivedSize != sizeof(*bufferSize) || *bufferSize <= 0) {        std::cerr << "Error: Received incorrect buffer size!" << std::endl;        close(*clientSocket);        return -1;    }    return 0;}bool isUserConnected(const std::string& userID){    for(User* user: users)    {        if(user->getID() == userID)            return true;    }    return false;}

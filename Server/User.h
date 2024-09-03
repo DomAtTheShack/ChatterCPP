@@ -11,14 +11,15 @@
 class User
         {
 public:
-    User(int* clientSocket, std::string username);
+    User(int* clientSocket, std::string username, std::string ID);
 
     ~User();
 
-
+    std::string getID() const;
 private:
     int* clientSocket;
     std::string user;
+    std::string ID;
 
 
 };
