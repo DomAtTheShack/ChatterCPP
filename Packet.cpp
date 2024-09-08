@@ -42,9 +42,9 @@ Packet::Packet(std::string usr, string msg)
 Packet::~Packet() = default;
 
 // Serialize the object into a byte buffer
-void Packet::serialize(char* buffer, size_t size) {
+void Packet::serialize(char* buffer, size_t size, Packet* pkt) {
     // Ensure the buffer size is sufficient
-    if (size < getSerializedSize()) return;
+    if (size < pkt->getSerializedSize()) return;
 
     // Copy integer
     // memcpy(buffer + offset, &id, sizeof(id));
@@ -59,9 +59,9 @@ void Packet::serialize(char* buffer, size_t size) {
 
     size_t offset = 0;
 
-    serializeString(buffer, size, offset, id);
-    serializeString(buffer, size, offset, usr);
-    serializeString(buffer, size, offset, message);
+    serializeString(buffer, size, offset, pkt->id);
+    serializeString(buffer, size, offset, pkt->usr);
+    serializeString(buffer, size, offset, pkt->message);
 }
 
 void Packet::serializeString(char* buffer, size_t bufferSize, size_t& offset, const std::string& stringToSerial) {
@@ -84,15 +84,16 @@ void Packet::serializeString(char* buffer, size_t bufferSize, size_t& offset, co
 }
 
 // Deserialize the object from a byte buffer
-void Packet::deserialize(const char* buffer, size_t bufferSize) {
+void Packet::deserialize(const char* buffer, size_t bufferSize, Packet* pkt)
+{
     size_t offset = 0;
 
     // Read the strings into the buffer
-    deserializeString(offset, buffer, bufferSize, &id);
+    deserializeString(offset, buffer, bufferSize, &pkt->id);
 
-    deserializeString(offset, buffer, bufferSize, &usr);
+    deserializeString(offset, buffer, bufferSize, &pkt->usr);
 
-    deserializeString(offset, buffer, bufferSize, &message);
+    deserializeString(offset, buffer, bufferSize, &pkt->message);
 
 
 }
@@ -207,71 +208,58 @@ std::string Packet::generateUSERID()
     return md5(idBefore);
 }
 
-bool Packet::receiveAll(int clientSocket, char* buffer, size_t totalBytes) {
-    size_t bytesRead = 0;  // Total bytes read so far
-    struct timeval timeout;
-    timeout.tv_sec = 5;  // 5 seconds timeout
-    timeout.tv_usec = 0;
-    setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+bool Packet::receiveAll(int clientSocket, char* buffer, size_t length) {
+    ssize_t total = 0;
+    ssize_t n;
 
-
-    while (bytesRead < totalBytes) {
-        // Attempt to read the remaining number of bytes
-        ssize_t result = recv(clientSocket, buffer + bytesRead, totalBytes - bytesRead, 0);
-
-        if (result < 0) {
-            // Error occurred during recv
-            std::cerr << "Error: Failed to receive data!" << std::endl;
-            return false;
-        } else if (result == 0) {
-            // Connection closed gracefully by the client
-            std::cerr << "Connection closed by the client!" << std::endl;
-            return false;
+    while (total < length) {
+        n = recv(clientSocket, buffer + total, length - total, 0);
+        if (n < 0) {
+            std::cerr << "Error receiving data: " << strerror(errno) << '\n';
+            return false; // Error occurred
+        } else if (n == 0) {
+            std::cerr << "Connection closed by the server." << '\n';
+            return false; // Connection closed
         }
-
-        // Update the total bytes read so far
-        bytesRead += result;
+        total += n;
     }
-
-    // If we reach this point, we have successfully read all expected data
     return true;
 }
 
-bool Packet::checkAndReceivePacket(int* clientSocket) {
-    // Determine the size of the object in bytes
+bool Packet::checkAndReceivePacket(int* clientSocket, Packet* pkt)
+{
     size_t totalBytes = 8192;
-    char* buffer = new char[totalBytes];  // Dynamically allocate buffer of the appropriate size
+    char* buffer = new char[totalBytes];  // Dynamically allocate buffer
+    memset(buffer, 0, totalBytes);        // Initialize buffer to zero
 
-    fd_set readfds;
+    fd_set read_fds;    // File descriptor set
+    FD_ZERO(&read_fds); // Clear the set
+    FD_SET(*clientSocket, &read_fds); // Add client socket to the set
+
+    // Timeout setup (optional)
     struct timeval timeout;
-
-    // Set up the timeout for select
-    timeout.tv_sec = 5;  // 5 second timeout
+    timeout.tv_sec = 5;  // 5-second timeout
     timeout.tv_usec = 0;
 
-    // Clear the set and add our socket
-    FD_ZERO(&readfds);
-    FD_SET(*clientSocket, &readfds);
+    // Wait for the socket to be ready for reading
+    int selectResult = select(*clientSocket + 1, &read_fds, NULL, NULL, &timeout);
 
-    // Use select to wait for data to be available on the socket
-    int activity = select(*clientSocket + 1, &readfds, nullptr, nullptr, &timeout);
-
-    if (activity < 0) {
-        std::cerr << "Error: select() failed!" << std::endl;
+    if (selectResult < 0) {
+        std::cerr << "Error: select() failed! " << strerror(errno) << std::endl;
         delete[] buffer;  // Clean up
         return false;
-    } else if (activity == 0) {
+    } else if (selectResult == 0) {
         // Timeout occurred, no data available
         delete[] buffer;  // Clean up
         return false; // No new packet has been sent
     }
 
     // Data is available to be read
-    if (FD_ISSET(*clientSocket, &readfds)) {
+    if (FD_ISSET(*clientSocket, &read_fds)) {
         // Call receiveAll to receive the complete packet
         if (Packet::receiveAll(*clientSocket, buffer, totalBytes)) {
             // Copy the data from the buffer to the object
-            deserialize(buffer, totalBytes);
+            deserialize(buffer, totalBytes, pkt);
             std::cout << "Packet received successfully!" << '\n';
             delete[] buffer;  // Clean up
             return true;
@@ -291,11 +279,22 @@ int Packet::sendPacket(Packet pkt, int* clientSocket)
     size_t bufferSize = pkt.getSerializedSize();
     char* buffer = new char[bufferSize];
 
-    pkt.serialize(buffer, bufferSize);
+    serialize(buffer, bufferSize, &pkt);
 
-    if(send(*clientSocket, &bufferSize, sizeof(int), 0) == -1) return -1;
-    return send(*clientSocket, buffer, bufferSize, 0);
+    // Send the size of the packet first
+    if (send(*clientSocket, &bufferSize, sizeof(int), 0) == -1) {
+        delete[] buffer;  // Clean up memory in case of error
+        return -1;
+    }
+
+    // Send the actual packet data
+    int result = send(*clientSocket, buffer, bufferSize, 0);
+
+    delete[] buffer;  // Clean up memory after sending
+
+    return result; // Return the result of the send call
 }
+
 
 
 std::string Packet::getMsg() const {

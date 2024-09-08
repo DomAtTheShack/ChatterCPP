@@ -20,8 +20,8 @@ public:
     explicit Packet(std::string usr);
     ~Packet();
 
-    void serialize(char* buffer, size_t size);
-    void deserialize(const char *buffer, size_t bufferSize);
+    static void serialize(char* buffer, size_t size, Packet* pkt);
+    static void deserialize(const char* buffer, size_t bufferSize, Packet* pkt);
 
     size_t getSerializedSize() const;
 
@@ -36,7 +36,7 @@ public:
     static bool receiveAll(int clientSocket, char *buffer, size_t totalBytes);
     static int sendPacket(Packet pkt, int* clientSocket);
 
-    bool checkAndReceivePacket(int *clientSocket);
+    static bool checkAndReceivePacket(int* clientSocket, Packet* pkt);
 
 private:
     std::string id;
