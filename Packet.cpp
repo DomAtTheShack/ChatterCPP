@@ -279,54 +279,76 @@ bool Packet::checkAndReceivePacket(int* clientSocket, Packet* pkt)
 {
     size_t totalBytes = 8192;
     char* buffer = new char[totalBytes];  // Dynamically allocate buffer
-    memset(buffer, 0, totalBytes);        // Initialize buffer to zero
 
-    fd_set read_fds;    // File descriptor set
-    FD_ZERO(&read_fds); // Clear the set
+    // Ensure the socket is ready for reading before attempting to receive data
+    if (!isSocketReady(clientSocket)) {
+        delete[] buffer;  // Clean up
+        return false;
+    }
+
+    // Receive all data from the socket and process the packet
+    if (receiveAndDeserialize(clientSocket, buffer, totalBytes, pkt)) {
+        std::cout << "Packet received successfully!" << '\n';
+        delete[] buffer;  // Clean up
+        return true;
+    } else {
+        delete[] buffer;  // Clean up
+        return false;
+    }
+}
+
+/**
+ * Checks if the client socket is ready for reading using the select() system call.
+ * @param clientSocket Pointer to the client socket to monitor.
+ * @return true if the socket is ready for reading, false otherwise.
+ */
+bool Packet::isSocketReady(int* clientSocket)
+{
+    fd_set read_fds;
+    FD_ZERO(&read_fds);         // Clear the set
     FD_SET(*clientSocket, &read_fds); // Add client socket to the set
 
-    // Timeout setup (optional)
     struct timeval timeout;
-    timeout.tv_sec = 5;  // 5-second timeout
+    timeout.tv_sec = 5;  // Set timeout to 5 seconds
     timeout.tv_usec = 0;
 
-    // Wait for the socket to be ready for reading
+    // Wait for socket readiness
     int selectResult = select(*clientSocket + 1, &read_fds, NULL, NULL, &timeout);
 
     if (selectResult < 0)
     {
         std::cerr << "Error: select() failed! " << strerror(errno) << std::endl;
-        delete[] buffer;  // Clean up
         return false;
-    } else if (selectResult == 0)
+    }
+    else if (selectResult == 0)
     {
         // Timeout occurred, no data available
-        delete[] buffer;  // Clean up
-        return false; // No new packet has been sent
+        return false;
     }
 
-    // Data is available to be read
-    if (FD_ISSET(*clientSocket, &read_fds))
-    {
-        // Call receiveAll to receive the complete packet
-        if (Packet::receiveAll(*clientSocket, buffer, totalBytes))
-        {
-            // Copy the data from the buffer to the object
-            deserialize(buffer, totalBytes, pkt);
-            std::cout << "Packet received successfully!" << '\n';
-            delete[] buffer;  // Clean up
-            return true;
-        } else
-        {
-            std::cerr << "Failed to receive complete packet!" << '\n';
-            delete[] buffer;  // Clean up
-            return false;
-        }
-    }
-
-    delete[] buffer;  // Clean up
-    return false;
+    return FD_ISSET(*clientSocket, &read_fds);
 }
+
+/**
+ * Receives data from the client socket and deserializes it into a Packet object.
+ * @param clientSocket Pointer to the client socket.
+ * @param buffer Buffer to hold received data.
+ * @param totalBytes Size of the buffer.
+ * @param pkt Pointer to the Packet object where data will be stored.
+ * @return true if data was received and deserialized successfully, false otherwise.
+ */
+bool Packet::receiveAndDeserialize(int* clientSocket, char* buffer, size_t totalBytes, Packet* pkt)
+{
+    if (Packet::receiveAll(*clientSocket, buffer, totalBytes)) {
+        // Copy the data from the buffer to the object
+        deserialize(buffer, totalBytes, pkt);
+        return true;
+    } else {
+        std::cerr << "Failed to receive complete packet!" << '\n';
+        return false;
+    }
+}
+
 
 int Packet::sendPacket(Packet pkt, int* clientSocket)
 {

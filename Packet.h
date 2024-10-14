@@ -36,7 +36,7 @@ public:
     static bool receiveAll(int clientSocket, char *buffer, size_t totalBytes);
     static int sendPacket(Packet pkt, int* clientSocket);
 
-    static bool checkAndReceivePacket(int* clientSocket, Packet* pkt);
+    bool checkAndReceivePacket(int* clientSocket, Packet* pkt);
 
 private:
     std::string id;
@@ -53,6 +53,9 @@ private:
 
     static void serializeString(char *buffer, size_t bufferSize, size_t &offset, const std::string &stringToSerial);
 
+    bool receiveAndDeserialize(int *clientSocket, char *buffer, size_t totalBytes, Packet *pkt);
+
+    bool isSocketReady(int *clientSocket);
 };
 
 
