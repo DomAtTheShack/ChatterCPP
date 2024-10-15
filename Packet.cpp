@@ -112,22 +112,22 @@ void Packet::serializeString(char* buffer, size_t bufferSize, size_t& offset, co
     offset += strLength;
 }
 
-// Deserialize the object from a byte buffer
+
 void Packet::deserialize(const char* buffer, size_t bufferSize, Packet* pkt)
 {
     size_t offset = 0;
 
-    // Read the strings into the buffer
+    // Deserialize the ID
     deserializeString(offset, buffer, bufferSize, &pkt->id);
 
+    // Deserialize the User
     deserializeString(offset, buffer, bufferSize, &pkt->usr);
 
+    // Deserialize the Message
     deserializeString(offset, buffer, bufferSize, &pkt->message);
-
-
 }
 
-void Packet::deserializeString(size_t& offset, const char* buffer, size_t bufferSize, string* stringToDeser)
+void Packet::deserializeString(size_t& offset, const char* buffer, size_t bufferSize, std::string* stringToDeser)
 {
     // Ensure the buffer is large enough to read the string length
     if (offset + sizeof(size_t) > bufferSize)
@@ -141,7 +141,7 @@ void Packet::deserializeString(size_t& offset, const char* buffer, size_t buffer
     memcpy(&strLength, buffer + offset, sizeof(strLength));
     offset += sizeof(strLength);
 
-    // Check if the string length is reasonable and within the buffer limits
+    // Check if the string length is within the buffer limits
     if (offset + strLength > bufferSize)
     {
         std::cerr << "Error: Buffer size too small to read string data!" << std::endl;
@@ -153,11 +153,16 @@ void Packet::deserializeString(size_t& offset, const char* buffer, size_t buffer
     offset += strLength;
 }
 
+
 // Calculate the total size required for serialization
 size_t Packet::getSerializedSize() const
 {
-    return id.size() + (sizeof(size_t) * 3) + usr.size() + message.size() ;
+    // The size is the sum of:
+    // - the size of each string (id, usr, message)
+    // - the size of each string's length (3 * sizeof(size_t))
+    return id.size() + usr.size() + message.size() + (sizeof(size_t) * 3);
 }
+
 
 const string& Packet::getID() const
 {
@@ -275,27 +280,40 @@ bool Packet::receiveAll(int clientSocket, char* buffer, size_t length)
     return true;
 }
 
-bool Packet::checkAndReceivePacket(int* clientSocket, Packet* pkt)
+bool Packet::checkAndReceivePacket(int* clientSocket)
 {
-    size_t totalBytes = 8192;
-    char* buffer = new char[totalBytes];  // Dynamically allocate buffer
+    size_t totalBytes = 0;
+
+    // First, receive the size of the incoming packet
+    if (recv(*clientSocket, &totalBytes, sizeof(totalBytes), 0) <= 0) {
+        std::cerr << "Failed to receive packet size or connection closed." << std::endl;
+        return false;
+    }
+
+    std::cout << "Expected packet size: " << totalBytes << " bytes" << std::endl;
+
+    char* buffer = new char[totalBytes];  // Dynamically allocate buffer based on the packet size
 
     // Ensure the socket is ready for reading before attempting to receive data
     if (!isSocketReady(clientSocket)) {
+        std::cerr << "Socket not ready or select failed." << std::endl;
         delete[] buffer;  // Clean up
         return false;
     }
 
     // Receive all data from the socket and process the packet
-    if (receiveAndDeserialize(clientSocket, buffer, totalBytes, pkt)) {
+    if (receiveAndDeserialize(clientSocket, buffer, totalBytes, this)) {
         std::cout << "Packet received successfully!" << '\n';
         delete[] buffer;  // Clean up
         return true;
     } else {
+        std::cerr << "Packet not received! Failed during deserialization." << '\n';
         delete[] buffer;  // Clean up
         return false;
     }
 }
+
+
 
 /**
  * Checks if the client socket is ready for reading using the select() system call.
@@ -305,14 +323,13 @@ bool Packet::checkAndReceivePacket(int* clientSocket, Packet* pkt)
 bool Packet::isSocketReady(int* clientSocket)
 {
     fd_set read_fds;
-    FD_ZERO(&read_fds);         // Clear the set
-    FD_SET(*clientSocket, &read_fds); // Add client socket to the set
+    FD_ZERO(&read_fds);
+    FD_SET(*clientSocket, &read_fds);
 
     struct timeval timeout;
     timeout.tv_sec = 5;  // Set timeout to 5 seconds
     timeout.tv_usec = 0;
 
-    // Wait for socket readiness
     int selectResult = select(*clientSocket + 1, &read_fds, NULL, NULL, &timeout);
 
     if (selectResult < 0)
@@ -322,12 +339,13 @@ bool Packet::isSocketReady(int* clientSocket)
     }
     else if (selectResult == 0)
     {
-        // Timeout occurred, no data available
+        std::cerr << "Timeout: No data available on the socket." << std::endl;
         return false;
     }
 
     return FD_ISSET(*clientSocket, &read_fds);
 }
+
 
 /**
  * Receives data from the client socket and deserializes it into a Packet object.
@@ -371,3 +389,5 @@ int Packet::sendPacket(Packet pkt, int* clientSocket)
 
     return result; // Return the result of the send call
 }
+
+

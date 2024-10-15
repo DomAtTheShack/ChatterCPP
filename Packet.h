@@ -36,7 +36,7 @@ public:
     static bool receiveAll(int clientSocket, char *buffer, size_t totalBytes);
     static int sendPacket(Packet pkt, int* clientSocket);
 
-    bool checkAndReceivePacket(int* clientSocket, Packet* pkt);
+    bool checkAndReceivePacket(int* clientSocket);
 
 private:
     std::string id;
